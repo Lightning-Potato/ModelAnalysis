@@ -14,7 +14,7 @@ import unicodedata
 
 # ========== 配置 ==========
 # 总共收集文本数（注意该值应是3的倍数，因为分为3个类别）
-NUM_TEXTS = 1602 # 您的目标总数
+NUM_TEXTS = 1605 # 您的目标总数
 OUT_FILE = "human_texts.csv"
 # 定义文本单词长度范围
 MIN_LEN_WORDS = 200
