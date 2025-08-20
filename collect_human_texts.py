@@ -70,6 +70,9 @@ def fetch_news(num):
         "http://rss.cnn.com/rss/edition_world.rss",
         "https://feeds.reuters.com/reuters/worldNews",
         "https://www.theguardian.com/world/rss",
+        "https://apnews.com/apf-topnews",  # 美联社
+        "https://www.aljazeera.com/xml/rss/all.xml",  # Al Jazeera
+        "https://www.wsj.com/xml/rss/3_7085.xml",  # 华尔街日报
     ]
     full_texts = []
 
@@ -127,12 +130,21 @@ def fetch_academic(num):
     max_results_per_call = 50  # 每次调用获取50篇摘要
 
     search_queries = [
-        "cat:cs.AI",
-        "cat:cs.CV",
-        "cat:math.CO",
-        "cat:stat.ML",
-        "cat:physics.ao-ph",
-        "cat:q-bio.GN",
+        "cat:cs.AI",      # 人工智能
+        "cat:cs.CV",      # 计算机视觉
+        "cat:cs.CL",      # 计算语言学
+        "cat:math.CO",    # 组合数学
+        "cat:stat.ML",    # 机器学习
+        "cat:physics.ao-ph", # 天体物理学
+        "cat:q-bio.GN",   # 基因组学
+        "cat:astro-ph.GA",# 星系天体物理学
+        "cat:hep-th",     # 高能物理 - 理论
+        "cat:cond-mat.mes-hall", # 凝聚态物理
+        "cat:chem-ph",    # 化学物理
+        "cat:eess.AS",    # 音频、语音处理
+        "cat:cs.LG",      # 机器学习（新）
+        "cat:cs.IR",      # 信息检索
+        "cat:q-fin.GN",   # 量化金融
     ]
 
     for query in search_queries:
@@ -229,6 +241,39 @@ def fetch_novels(num):
         "https://www.gutenberg.org/files/1399/1399-0.txt",
         "https://www.gutenberg.org/files/1529/1529-0.txt",
         "https://www.gutenberg.org/files/17709/17709-0.txt",
+        "https://www.gutenberg.org/files/132/132-0.txt",
+        "https://www.gutenberg.org/files/17/17-0.txt",
+        "https://www.gutenberg.org/files/16/16-0.txt",
+        "https://www.gutenberg.org/files/25525/25525-0.txt",
+        "https://www.gutenberg.org/files/16328/16328-0.txt",
+        "https://www.gutenberg.org/files/1524/1524-0.txt",
+        "https://www.gutenberg.org/files/161/161-0.txt",
+        "https://www.gutenberg.org/files/1232/1232-0.txt",
+        "https://www.gutenberg.org/files/67554/67554-0.txt",
+        "https://www.gutenberg.org/files/24985/24985-0.txt",
+        "https://www.gutenberg.org/files/70275/70275-0.txt",
+        "https://www.gutenberg.org/files/1000/1000-0.txt",
+        "https://www.gutenberg.org/files/101/101-0.txt",
+        "https://www.gutenberg.org/files/158/158-0.txt",
+        "https://www.gutenberg.org/files/70576/70576-0.txt",
+        "https://www.gutenberg.org/files/46/46-0.txt",
+        "https://www.gutenberg.org/files/35/35-0.txt",
+        "https://www.gutenberg.org/files/10719/10719-0.txt",
+        "https://www.gutenberg.org/files/23/23-0.txt",
+        "https://www.gutenberg.org/files/73117/73117-0.txt",
+        "https://www.gutenberg.org/files/1155/1155-0.txt",
+        "https://www.gutenberg.org/files/1513/1513-0.txt",
+        "https://www.gutenberg.org/files/2600/2600-0.txt",
+        "https://www.gutenberg.org/files/1400/1400-0.txt",
+        "https://www.gutenberg.org/files/1531/1531-0.txt",
+        "https://www.gutenberg.org/files/2814/2814-0.txt",
+        "https://www.gutenberg.org/files/2772/2772-0.txt",
+        "https://www.gutenberg.org/files/2065/2065-0.txt",
+        "https://www.gutenberg.org/files/1138/1138-0.txt",
+        "https://www.gutenberg.org/files/6109/6109-0.txt",
+        "https://www.gutenberg.org/files/73289/73289-0.txt",
+        "https://www.gutenberg.org/files/1457/1457-0.txt",
+        "https://www.gutenberg.org/files/64761/64761-0.txt",
     ]
     texts = []
     for url in urls:
