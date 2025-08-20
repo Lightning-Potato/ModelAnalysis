@@ -14,10 +14,30 @@ NUM_SAMPLES = 10  # 总共要生成的AIGC文本数量
 OUT_FILE = "aigc_texts.csv"
 RANDOM_SEED = 42
 PROMPTS = [
-    "Write a short news article about a new scientific discovery.",
-    "Summarize a research paper on the topic of artificial intelligence.",
-    "Continue a short story about a detective in a new city.",
-    "In the style of a formal report, describe the latest market trends."
+    # News Prompts (more diverse topics)
+    "Write a detailed news report about a new scientific discovery in the field of astrophysics.",
+    "Report on the economic impact of recent changes in global trade policy.",
+    "Compose a news article about a major cultural event or festival taking place in a European city.",
+    "Provide an update on the progress of a new space mission to Mars.",
+    "Write a news story about the surprising outcome of a local election.",
+    "Summarize the latest developments in sustainable urban planning.",
+
+    # Academic Prompts (more diverse fields)
+    "Compose an in-depth analysis of the ethical implications of using artificial intelligence in medical diagnosis.",
+    "Summarize a research paper on the topic of quantum entanglement.",
+    "Explain the principles of non-Euclidean geometry in a detailed, academic tone.",
+    "Write a literature review on the use of symbolism in Victorian-era novels.",
+    "Describe the process of photosynthesis and its importance to the ecosystem in a scientific report format.",
+    "Provide a scholarly analysis of the socio-economic factors contributing to the decline of ancient empires.",
+
+    # Novel/Creative Prompts (more diverse genres)
+    "Continue a short story about a detective in a new city, focusing on the dark and moody atmosphere.",
+    "Describe a journey through a fantastical, non-existent landscape, detailing the flora, fauna, and geography.",
+    "Write the first chapter of a historical fiction novel set during the Renaissance.",
+    "Compose a short story from the perspective of an animal observing human behavior.",
+    "Narrate a science fiction tale about the first human contact with an alien civilization.",
+    "Tell a mysterious story about an old, forgotten library where the books have a life of their own.",
+    "Write a short piece of fantasy fiction centered on a magic-wielding blacksmith.",
 ]
 
 # ========== 文本清理函数 ==========
