@@ -64,7 +64,7 @@ def main():
         return
 
     logging.info("正在加载原始数据集...")
-    # ✅ 指定 utf-8-sig 读入，避免乱码
+    # 指定 utf-8-sig 读入，避免乱码
     df_original = pd.read_csv(input_file, encoding="utf-8-sig")
 
     if not {"text", "label"}.issubset(df_original.columns):
@@ -77,7 +77,12 @@ def main():
         logging.warning("数据集中没有 AIGC 文本 (label == 1)，无法生成测试数据。")
         return
 
-    df_aigc = df_aigc.head(2)  # 仅取前 5 条用于测试
+    # ✅ 修改此处，仅处理第101条到第200条文本（Python索引从0开始，所以是100到199）
+    df_aigc = df_aigc.iloc[200:600]
+
+    if df_aigc.empty:
+        logging.warning("在指定范围内没有找到文本。")
+        return
 
     # 初始化模型
     models = initialize_models()
@@ -88,8 +93,9 @@ def main():
     # --- 生成英文→中文→英文 回译数据 ---
     logging.info("\n开始英文→中文→英文 回译...")
     df_translation = df_aigc.copy()
+    # 调整 tqdm 的 desc，使其显示正确的索引范围
     df_translation['translated_text'] = [
-        translate_en_zh_en(text, zh_en_tokenizer, zh_en_model, en_zh_tokenizer, en_zh_model, i)
+        translate_en_zh_en(text, zh_en_tokenizer, zh_en_model, en_zh_tokenizer, en_zh_model, 100 + i)
         for i, text in tqdm(enumerate(df_translation['text']), desc="翻译中")
     ]
 
@@ -98,8 +104,8 @@ def main():
     df_final = df_aigc[['text', 'label']].rename(columns={'text': 'original_text', 'label': 'original_label'})
     df_final = df_final.join(df_translation['translated_text'])
 
-    # ✅ 保存时也用 utf-8-sig，避免乱码
-    output_file = 'translated_text.csv'
+    # ✅ 更改保存文件名，避免覆盖之前的数据
+    output_file = 'translated_text(201-600).csv'
     df_final.to_csv(output_file, index=False, encoding="utf-8-sig")
     logging.info(f"所有数据已生成并保存到 {output_file}")
 
