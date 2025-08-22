@@ -50,7 +50,7 @@ def main():
         return
 
     # 仅取前 5 条用于测试
-    df_aigc = df_aigc.head(5)
+    df_aigc = df_aigc.head(1000)
 
     # --- 生成加噪数据集 ---
     logging.info("\n开始添加噪声...")
