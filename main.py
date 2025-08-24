@@ -1,29 +1,26 @@
-# Author: Hu Jia
-# Date: 2025.8.16
-# Updated: 2025.8.22
+# 作者: 胡嘉
+# 日期: 2025.8.16
 
 # -*- coding: utf-8 -*-
 """
 main.py
-该文件是整个实验的入口，它负责调用其他模块中的函数来完成数据处理、模型评估和结果分析。
-此版本在原有基础上增加了跨领域性能分析和鲁棒性测试功能。
+该文件是整个实验的入口。它负责调用其他模块中的函数来完成数据准备、模型训练、评估和结果分析。
+此版本按照要求正确分离了训练和评估阶段。
 """
 import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score, classification_report, f1_score, precision_score, recall_score, \
     roc_auc_score
-from datetime import datetime
 import os
 
 # 从我们自己创建的模块中导入函数
-# 假设这些模块已存在并正确工作
-from data_preparation import load_dataset, create_mock_dataset
+# 假设这些模块已存在并正确实现
+from data_preparation import load_dataset
 from models import load_models_and_tokenizers, calculate_perplexity, get_cls_embedding
 
 # 设置随机种子，确保实验结果可复现
@@ -32,42 +29,40 @@ torch.manual_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 
 
-def evaluate_model(features, labels, model_name, classifier_type='LogisticRegression'):
+def train_classifier(features, labels, classifier_type='LogisticRegression'):
     """
-    使用给定的特征和标签评估分类器模型。
+    使用给定的特征和标签训练分类器模型。
     """
-    # 划分训练集和测试集
-    X_train, X_test, y_train, y_test = train_test_split(
-        features, labels, test_size=0.2, random_state=RANDOM_SEED
-    )
-
-    # 选择并训练分类器
+    print(f"-> 正在训练分类器: {classifier_type}")
     if classifier_type == 'LogisticRegression':
         classifier = LogisticRegression(random_state=RANDOM_SEED, max_iter=2000)
     elif classifier_type == 'MLPClassifier':
-        # 修正: 'RANDM_SEED' -> 'RANDOM_SEED'
         classifier = MLPClassifier(random_state=RANDOM_SEED, max_iter=2000)
     else:
-        raise ValueError("Invalid classifier type specified.")
+        raise ValueError("指定的分类器类型无效。")
 
-    classifier.fit(X_train, y_train)
+    classifier.fit(features, labels)
+    return classifier
 
-    # 在测试集上进行预测和评估
-    y_pred = classifier.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred)
-    recall = recall_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred)
-    roc_auc = roc_auc_score(y_test, y_pred)
+
+def evaluate_classifier(classifier, features, labels):
+    """
+    在给定数据集上评估一个已训练的分类器。
+    """
+    y_pred = classifier.predict(features)
+    accuracy = accuracy_score(labels, y_pred)
+    precision = precision_score(labels, y_pred, zero_division=0)
+    recall = recall_score(labels, y_pred, zero_division=0)
+    f1 = f1_score(labels, y_pred, zero_division=0)
+    roc_auc = roc_auc_score(labels, y_pred)
 
     return {
-        'model_name': model_name,
         'accuracy': accuracy,
         'precision': precision,
         'recall': recall,
         'f1_score': f1,
         'roc_auc': roc_auc,
-        'report': classification_report(y_test, y_pred, output_dict=True)
+        'report': classification_report(labels, y_pred, output_dict=True)
     }
 
 
@@ -75,9 +70,9 @@ def main():
     """
     主函数，执行整个实验流程。
     """
-    print("--- 论文实验开始 ---")
+    print("--- AIGC文本检测实验开始 ---")
 
-    # 第1步: 加载所有模型和工具
+    # 第1步: 加载所有模型和分词器
     print("正在加载所有模型和分词器...")
     try:
         models_dict = load_models_and_tokenizers()
@@ -86,118 +81,141 @@ def main():
         print("请确保网络连接正常且模型已正确安装。程序终止。")
         return
 
-    # 第2步: 准备数据集
-    # 按照大纲要求，分领域加载数据集
-    dataset_paths = {
-        # '新闻文本': 'news_data.csv',
-        # '学术文本': 'academic_data.csv',
-        # '小说文本': 'novel_data.csv',
-        # '鲁棒性-改写': 'rewritten_text.csv',
-        '鲁棒性-翻译': 'translated_text.csv',
-        '鲁棒性-噪声': 'noisy_text.csv',
+    # 第2步: 加载数据集
+    print("\n--- 正在加载数据集... ---")
+    dataframes = {}
+    required_files = {
+        'train': 'train.csv',
+        'test': 'test.csv',
+        'robustness_translated': 'robustness_translated.csv',
+        'robustness_noisy': 'robustness_noisy.csv'
     }
 
-    datasets = {}
-    for name, path in dataset_paths.items():
+    all_files_exist = True
+    for name, path in required_files.items():
         if os.path.exists(path):
-            datasets[name] = load_dataset(path)
-            print(f"成功加载 {name} 数据集，样本量: {len(datasets[name])}")
+            dataframes[name] = load_dataset(path)
+            print(f"成功加载 '{path}'，样本量: {len(dataframes[name])}")
         else:
-            print(f"警告：数据集文件 '{path}' 未找到。跳过该部分实验。")
+            print(f"警告：数据集文件 '{path}' 未找到。请确保它存在。")
+            all_files_exist = False
 
-    if not datasets:
-        print("未找到任何数据集，正在创建模拟数据集用于演示。")
-        datasets['模拟数据集'] = create_mock_dataset(RANDOM_SEED, num_samples_per_class=50)
+    if not all_files_exist:
+        print("所需的数据集文件缺失。请在运行实验前创建它们。程序终止。")
+        return
 
-    # 第3步: 评估所有模型
-    all_results = []
-
-    # 循环遍历所有数据集进行评估
-    for dataset_name, data in datasets.items():
-        print(f"\n--- 正在评估数据集: {dataset_name} ---")
-
-        if data.empty:
-            print(f"数据集 {dataset_name} 为空，无法进行评估。")
-            continue
-
-        # 特征提取
-        print("正在提取所有模型的特征...")
-        data['perplexity'] = data['text'].apply(
+    # 第3步: 为所有数据集提取特征
+    print("\n--- 正在为所有数据集提取特征... ---")
+    for name, df in dataframes.items():
+        print(f"-> 正在为 {name} 数据集提取特征...")
+        df['perplexity'] = df['text'].apply(
             lambda x: calculate_perplexity(x, models_dict['gpt2']['model'], models_dict['gpt2']['tokenizer'])
         )
-        data['roberta_features'] = data['text'].apply(
+        df['roberta_features'] = df['text'].apply(
             lambda x: get_cls_embedding(x, models_dict['roberta']['model'], models_dict['roberta']['tokenizer'])
         )
-        data['bert_features'] = data['text'].apply(
+        df['bert_features'] = df['text'].apply(
             lambda x: get_cls_embedding(x, models_dict['bert']['model'], models_dict['bert']['tokenizer'])
         )
-        print("所有特征提取完成。")
+    print("特征提取完成。")
 
-        # 评估模型
-        labels = data['label'].values
+    # 第4步: 在训练数据上训练分类器
+    print("\n--- 正在使用 train.csv 训练分类器... ---")
 
-        # 统计模型 (Perplexity)
-        results = evaluate_model(data['perplexity'].values.reshape(-1, 1), labels, 'Perplexity')
-        results['dataset'] = dataset_name
-        all_results.append(results)
+    # Perplexity 分类器
+    features_train_perp = dataframes['train']['perplexity'].values.reshape(-1, 1)
+    labels_train = dataframes['train']['label'].values
+    classifier_perp = train_classifier(features_train_perp, labels_train, 'LogisticRegression')
 
-        # 深度学习模型
-        results = evaluate_model(np.vstack(data['roberta_features'].values), labels, 'RoBERTa')
-        results['dataset'] = dataset_name
-        all_results.append(results)
+    # RoBERTa 分类器
+    features_train_roberta = np.vstack(dataframes['train']['roberta_features'].values)
+    classifier_roberta = train_classifier(features_train_roberta, labels_train, 'MLPClassifier')
 
-        results = evaluate_model(np.vstack(data['bert_features'].values), labels, 'BERT')
-        results['dataset'] = dataset_name
-        all_results.append(results)
+    # BERT 分类器
+    features_train_bert = np.vstack(dataframes['train']['bert_features'].values)
+    classifier_bert = train_classifier(features_train_bert, labels_train, 'MLPClassifier')
 
-        # 混合模型
-        hybrid_features = np.hstack(
-            [data['perplexity'].values.reshape(-1, 1), np.vstack(data['roberta_features'].values)])
-        results = evaluate_model(hybrid_features, labels, 'Hybrid (Perplexity + RoBERTa)')
-        results['dataset'] = dataset_name
-        all_results.append(results)
+    # 混合分类器
+    features_train_hybrid = np.hstack([features_train_perp, features_train_roberta])
+    classifier_hybrid = train_classifier(features_train_hybrid, labels_train, 'LogisticRegression')
 
-    # 第4步: 结果汇总与可视化
+    print("所有分类器训练完成。")
+
+    # 第5步: 在不同数据集上评估所有模型
+    all_results = []
+    evaluation_datasets = {
+        'Test Set (基准)': dataframes['test'],
+        '鲁棒性 (翻译)': dataframes['robustness_translated'],
+        '鲁棒性 (噪声)': dataframes['robustness_noisy']
+    }
+
+    for dataset_name, df_eval in evaluation_datasets.items():
+        print(f"\n--- 正在评估数据集: {dataset_name} ---")
+
+        # Perplexity 模型评估
+        features_eval_perp = df_eval['perplexity'].values.reshape(-1, 1)
+        labels_eval = df_eval['label'].values
+        results_perp = evaluate_classifier(classifier_perp, features_eval_perp, labels_eval)
+        results_perp.update({'model_name': 'Perplexity', 'dataset': dataset_name})
+        all_results.append(results_perp)
+
+        # RoBERTa 模型评估
+        features_eval_roberta = np.vstack(df_eval['roberta_features'].values)
+        results_roberta = evaluate_classifier(classifier_roberta, features_eval_roberta, labels_eval)
+        results_roberta.update({'model_name': 'RoBERTa', 'dataset': dataset_name})
+        all_results.append(results_roberta)
+
+        # BERT 模型评估
+        features_eval_bert = np.vstack(df_eval['bert_features'].values)
+        results_bert = evaluate_classifier(classifier_bert, features_eval_bert, labels_eval)
+        results_bert.update({'model_name': 'BERT', 'dataset': dataset_name})
+        all_results.append(results_bert)
+
+        # 混合模型评估
+        features_eval_hybrid = np.hstack([features_eval_perp, features_eval_roberta])
+        results_hybrid = evaluate_classifier(classifier_hybrid, features_eval_hybrid, labels_eval)
+        results_hybrid.update({'model_name': 'Hybrid (Perplexity + RoBERTa)', 'dataset': dataset_name})
+        all_results.append(results_hybrid)
+
+    # 第6步: 汇总结果并可视化
     print("\n--- 正在汇总结果并生成图表... ---")
     results_df = pd.DataFrame(all_results)
-    results_df = results_df.round(4)  # 保留4位小数
+    results_df = results_df.round(4)
 
     # 打印最终结果表
-    print("\n--- 实验结果总览 ---")
+    print("\n--- 最终实验结果总览 ---")
     print(results_df[['dataset', 'model_name', 'accuracy', 'precision', 'recall', 'f1_score']])
     results_df.to_csv('evaluation_results.csv', index=False, encoding='utf-8')
-    print("\n实验结果已保存到 evaluation_results.csv")
+    print("\n结果已保存到 evaluation_results.csv")
 
-    # 创建性能指标对比图
-    # 按数据集分组绘制F1值
+    # 创建 F1 值对比图
     plt.figure(figsize=(16, 10))
     sns.barplot(data=results_df, x='model_name', y='f1_score', hue='dataset')
     plt.title('F1 Score Comparison Across Datasets', fontsize=16)
-    plt.xlabel('Model', fontsize=12)
-    plt.ylabel('F1 Score', fontsize=12)
-    plt.legend(title='Dataset')
+    plt.xlabel('模型', fontsize=12)
+    plt.ylabel('F1 值', fontsize=12)
+    plt.legend(title='数据集')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig('f1_comparison.png')
     print("图表已保存为 f1_comparison.png")
     plt.show()
 
-    # 创建一个简单的准确率对比图
+    # 创建准确率对比图
     plt.figure(figsize=(16, 10))
     sns.barplot(data=results_df, x='model_name', y='accuracy', hue='dataset')
     plt.title('Accuracy Comparison Across Datasets', fontsize=16)
-    plt.xlabel('Model', fontsize=12)
-    plt.ylabel('Accuracy', fontsize=12)
-    plt.legend(title='Dataset')
+    plt.xlabel('模型', fontsize=12)
+    plt.ylabel('准确率', fontsize=12)
+    plt.legend(title='数据集')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig('accuracy_comparison.png')
     print("图表已保存为 accuracy_comparison.png")
     plt.show()
 
-    print("\n--- 论文实验结束 ---")
+    print("\n--- 实验结束 ---")
 
 
 if __name__ == "__main__":
     main()
-
