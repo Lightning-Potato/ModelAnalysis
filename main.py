@@ -1,11 +1,8 @@
-# 作者: 胡嘉
-# 日期: 2025.8.16
-
 # -*- coding: utf-8 -*-
 """
 main.py
-该文件是整个实验的入口。它负责调用其他模块中的函数来完成数据准备、模型训练、评估和结果分析。
-此版本按照要求正确分离了训练和评估阶段。
+该文件是整个实验的入口。此版本已升级为使用K折交叉验证，以获得更具统计学意义和可信度的结果。
+它负责调用其他模块中的函数来完成数据准备、模型训练、评估和结果分析。
 """
 import torch
 import numpy as np
@@ -16,6 +13,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score, classification_report, f1_score, precision_score, recall_score, \
     roc_auc_score
+from sklearn.model_selection import KFold
 import os
 
 # 从我们自己创建的模块中导入函数
@@ -33,7 +31,6 @@ def train_classifier(features, labels, classifier_type='LogisticRegression'):
     """
     使用给定的特征和标签训练分类器模型。
     """
-    print(f"-> 正在训练分类器: {classifier_type}")
     if classifier_type == 'LogisticRegression':
         classifier = LogisticRegression(random_state=RANDOM_SEED, max_iter=2000)
     elif classifier_type == 'MLPClassifier':
@@ -61,8 +58,7 @@ def evaluate_classifier(classifier, features, labels):
         'precision': precision,
         'recall': recall,
         'f1_score': f1,
-        'roc_auc': roc_auc,
-        'report': classification_report(labels, y_pred, output_dict=True)
+        'roc_auc': roc_auc
     }
 
 
@@ -70,7 +66,7 @@ def main():
     """
     主函数，执行整个实验流程。
     """
-    print("--- AIGC文本检测实验开始 ---")
+    print("--- AIGC文本检测实验开始（K折交叉验证版） ---")
 
     # 第1步: 加载所有模型和分词器
     print("正在加载所有模型和分词器...")
@@ -81,12 +77,11 @@ def main():
         print("请确保网络连接正常且模型已正确安装。程序终止。")
         return
 
-    # 第2步: 加载数据集
+    # 第2步: 加载完整数据集
     print("\n--- 正在加载数据集... ---")
     dataframes = {}
     required_files = {
-        'train': 'train.csv',
-        'test': 'test.csv',
+        'full_dataset': 'my_dataset.csv',
         'robustness_translated': 'robustness_translated.csv',
         'robustness_noisy': 'robustness_noisy.csv'
     }
@@ -104,93 +99,134 @@ def main():
         print("所需的数据集文件缺失。请在运行实验前创建它们。程序终止。")
         return
 
-    # 第3步: 为所有数据集提取特征
-    print("\n--- 正在为所有数据集提取特征... ---")
-    for name, df in dataframes.items():
-        print(f"-> 正在为 {name} 数据集提取特征...")
-        df['perplexity'] = df['text'].apply(
-            lambda x: calculate_perplexity(x, models_dict['gpt2']['model'], models_dict['gpt2']['tokenizer'])
-        )
-        df['roberta_features'] = df['text'].apply(
-            lambda x: get_cls_embedding(x, models_dict['roberta']['model'], models_dict['roberta']['tokenizer'])
-        )
-        df['bert_features'] = df['text'].apply(
-            lambda x: get_cls_embedding(x, models_dict['bert']['model'], models_dict['bert']['tokenizer'])
-        )
+    full_dataset = dataframes['full_dataset']
+
+    # 第3步: 为完整数据集提取特征
+    print("\n--- 正在为完整数据集提取特征... ---")
+    full_dataset['perplexity'] = full_dataset['text'].apply(
+        lambda x: calculate_perplexity(x, models_dict['gpt2']['model'], models_dict['gpt2']['tokenizer'])
+    )
+    full_dataset['roberta_features'] = full_dataset['text'].apply(
+        lambda x: get_cls_embedding(x, models_dict['roberta']['model'], models_dict['roberta']['tokenizer'])
+    )
+    full_dataset['bert_features'] = full_dataset['text'].apply(
+        lambda x: get_cls_embedding(x, models_dict['bert']['model'], models_dict['bert']['tokenizer'])
+    )
     print("特征提取完成。")
 
-    # 第4步: 在训练数据上训练分类器
-    print("\n--- 正在使用 train.csv 训练分类器... ---")
+    # 第4步: 设置K折交叉验证
+    kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    all_fold_results = []
 
-    # Perplexity 分类器
-    features_train_perp = dataframes['train']['perplexity'].values.reshape(-1, 1)
-    labels_train = dataframes['train']['label'].values
-    classifier_perp = train_classifier(features_train_perp, labels_train, 'LogisticRegression')
+    print("\n--- 正在执行5折交叉验证... ---")
+    fold_count = 1
+    for train_index, test_index in kf.split(full_dataset):
+        print(f"-> 正在执行第 {fold_count} 折...")
 
-    # RoBERTa 分类器
-    features_train_roberta = np.vstack(dataframes['train']['roberta_features'].values)
-    classifier_roberta = train_classifier(features_train_roberta, labels_train, 'MLPClassifier')
+        train_df = full_dataset.iloc[train_index]
+        test_df = full_dataset.iloc[test_index]
 
-    # BERT 分类器
-    features_train_bert = np.vstack(dataframes['train']['bert_features'].values)
-    classifier_bert = train_classifier(features_train_bert, labels_train, 'MLPClassifier')
+        labels_train = train_df['label'].values
+        labels_test = test_df['label'].values
 
-    # 混合分类器
-    features_train_hybrid = np.hstack([features_train_perp, features_train_roberta])
-    classifier_hybrid = train_classifier(features_train_hybrid, labels_train, 'LogisticRegression')
+        # 训练所有分类器
+        features_train_perp = train_df['perplexity'].values.reshape(-1, 1)
+        classifier_perp = train_classifier(features_train_perp, labels_train, 'LogisticRegression')
 
-    print("所有分类器训练完成。")
+        features_train_roberta = np.vstack(train_df['roberta_features'].values)
+        classifier_roberta = train_classifier(features_train_roberta, labels_train, 'MLPClassifier')
 
-    # 第5步: 在不同数据集上评估所有模型
-    all_results = []
+        features_train_bert = np.vstack(train_df['bert_features'].values)
+        classifier_bert = train_classifier(features_train_bert, labels_train, 'MLPClassifier')
+
+        features_train_hybrid = np.hstack([features_train_perp, features_train_roberta])
+        classifier_hybrid = train_classifier(features_train_hybrid, labels_train, 'LogisticRegression')
+
+        # 在当前折的测试集上评估
+        features_test_perp = test_df['perplexity'].values.reshape(-1, 1)
+        results_perp = evaluate_classifier(classifier_perp, features_test_perp, labels_test)
+        results_perp.update({'model_name': 'Perplexity', 'dataset': 'Test Set (基准)', 'fold': fold_count})
+        all_fold_results.append(results_perp)
+
+        features_test_roberta = np.vstack(test_df['roberta_features'].values)
+        results_roberta = evaluate_classifier(classifier_roberta, features_test_roberta, labels_test)
+        results_roberta.update({'model_name': 'RoBERTa', 'dataset': 'Test Set (基准)', 'fold': fold_count})
+        all_fold_results.append(results_roberta)
+
+        features_test_bert = np.vstack(test_df['bert_features'].values)
+        results_bert = evaluate_classifier(classifier_bert, features_test_bert, labels_test)
+        results_bert.update({'model_name': 'BERT', 'dataset': 'Test Set (基准)', 'fold': fold_count})
+        all_fold_results.append(results_bert)
+
+        features_test_hybrid = np.hstack([features_test_perp, features_test_roberta])
+        results_hybrid = evaluate_classifier(classifier_hybrid, features_test_hybrid, labels_test)
+        results_hybrid.update(
+            {'model_name': 'Hybrid (Perplexity + RoBERTa)', 'dataset': 'Test Set (基准)', 'fold': fold_count})
+        all_fold_results.append(results_hybrid)
+
+        fold_count += 1
+
+    # 第5步: 在鲁棒性数据集上评估
     evaluation_datasets = {
-        'Test Set (基准)': dataframes['test'],
         '鲁棒性 (翻译)': dataframes['robustness_translated'],
         '鲁棒性 (噪声)': dataframes['robustness_noisy']
     }
 
+    print("\n--- 正在评估鲁棒性数据集... ---")
     for dataset_name, df_eval in evaluation_datasets.items():
-        print(f"\n--- 正在评估数据集: {dataset_name} ---")
-
-        # Perplexity 模型评估
-        features_eval_perp = df_eval['perplexity'].values.reshape(-1, 1)
+        print(f"-> 正在评估数据集: {dataset_name}...")
+        # 鲁棒性数据集的特征提取已在前面完成
         labels_eval = df_eval['label'].values
-        results_perp = evaluate_classifier(classifier_perp, features_eval_perp, labels_eval)
-        results_perp.update({'model_name': 'Perplexity', 'dataset': dataset_name})
-        all_results.append(results_perp)
-
-        # RoBERTa 模型评估
+        features_eval_perp = df_eval['perplexity'].values.reshape(-1, 1)
         features_eval_roberta = np.vstack(df_eval['roberta_features'].values)
-        results_roberta = evaluate_classifier(classifier_roberta, features_eval_roberta, labels_eval)
-        results_roberta.update({'model_name': 'RoBERTa', 'dataset': dataset_name})
-        all_results.append(results_roberta)
-
-        # BERT 模型评估
         features_eval_bert = np.vstack(df_eval['bert_features'].values)
-        results_bert = evaluate_classifier(classifier_bert, features_eval_bert, labels_eval)
-        results_bert.update({'model_name': 'BERT', 'dataset': dataset_name})
-        all_results.append(results_bert)
-
-        # 混合模型评估
         features_eval_hybrid = np.hstack([features_eval_perp, features_eval_roberta])
+
+        # 评估模型
+        results_perp = evaluate_classifier(classifier_perp, features_eval_perp, labels_eval)
+        results_perp.update({'model_name': 'Perplexity', 'dataset': dataset_name, 'fold': 0})  # 鲁棒性数据集不属于任何折，设为0
+        all_fold_results.append(results_perp)
+
+        results_roberta = evaluate_classifier(classifier_roberta, features_eval_roberta, labels_eval)
+        results_roberta.update({'model_name': 'RoBERTa', 'dataset': dataset_name, 'fold': 0})
+        all_fold_results.append(results_roberta)
+
+        results_bert = evaluate_classifier(classifier_bert, features_eval_bert, labels_eval)
+        results_bert.update({'model_name': 'BERT', 'dataset': dataset_name, 'fold': 0})
+        all_fold_results.append(results_bert)
+
         results_hybrid = evaluate_classifier(classifier_hybrid, features_eval_hybrid, labels_eval)
-        results_hybrid.update({'model_name': 'Hybrid (Perplexity + RoBERTa)', 'dataset': dataset_name})
-        all_results.append(results_hybrid)
+        results_hybrid.update({'model_name': 'Hybrid (Perplexity + RoBERTa)', 'dataset': dataset_name, 'fold': 0})
+        all_fold_results.append(results_hybrid)
 
-    # 第6步: 汇总结果并可视化
+    # 第6步: 汇总并计算均值和标准差
     print("\n--- 正在汇总结果并生成图表... ---")
-    results_df = pd.DataFrame(all_results)
-    results_df = results_df.round(4)
+    results_df = pd.DataFrame(all_fold_results)
 
-    # 打印最终结果表
-    print("\n--- 最终实验结果总览 ---")
-    print(results_df[['dataset', 'model_name', 'accuracy', 'precision', 'recall', 'f1_score']])
-    results_df.to_csv('evaluation_results.csv', index=False, encoding='utf-8')
-    print("\n结果已保存到 evaluation_results.csv")
+    # 仅对基准数据集（Test Set）计算均值和标准差
+    final_results = results_df[results_df['dataset'] == 'Test Set (基准)'].groupby('model_name').agg({
+        'accuracy': ['mean', 'std'],
+        'precision': ['mean', 'std'],
+        'recall': ['mean', 'std'],
+        'f1_score': ['mean', 'std']
+    }).reset_index()
+
+    # 将多级索引转换为单级，便于打印和保存
+    final_results.columns = ['_'.join(col).strip() for col in final_results.columns.values]
+
+    # 将鲁棒性数据集的结果附加到最终结果中
+    robustness_results = results_df[results_df['dataset'] != 'Test Set (基准)']
+    final_results = pd.concat([final_results, robustness_results], ignore_index=True)
+
+    # 打印最终结果表，现在包含均值和标准差
+    print("\n--- 最终实验结果总览 (基准数据集为均值±标准差) ---")
+    print(final_results)
+    final_results.to_csv('final_evaluation_results.csv', index=False, encoding='utf-8')
+    print("\n结果已保存到 final_evaluation_results.csv")
 
     # 创建 F1 值对比图
     plt.figure(figsize=(16, 10))
-    sns.barplot(data=results_df, x='model_name', y='f1_score', hue='dataset')
+    sns.barplot(data=final_results, x='model_name', y='f1_score_mean', hue='dataset')
     plt.title('F1 Score Comparison Across Datasets', fontsize=16)
     plt.xlabel('模型', fontsize=12)
     plt.ylabel('F1 值', fontsize=12)
@@ -203,7 +239,7 @@ def main():
 
     # 创建准确率对比图
     plt.figure(figsize=(16, 10))
-    sns.barplot(data=results_df, x='model_name', y='accuracy', hue='dataset')
+    sns.barplot(data=final_results, x='model_name', y='accuracy_mean', hue='dataset')
     plt.title('Accuracy Comparison Across Datasets', fontsize=16)
     plt.xlabel('模型', fontsize=12)
     plt.ylabel('准确率', fontsize=12)
