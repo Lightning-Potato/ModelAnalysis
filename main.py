@@ -175,16 +175,30 @@ def main():
     print("\n--- 正在评估鲁棒性数据集... ---")
     for dataset_name, df_eval in evaluation_datasets.items():
         print(f"-> 正在评估数据集: {dataset_name}...")
-        # 鲁棒性数据集的特征提取已在前面完成
+
+        # ✅ 对鲁棒性数据集提取特征
+        df_eval['perplexity'] = df_eval['text'].apply(
+            lambda x: calculate_perplexity(x, models_dict['gpt2']['model'], models_dict['gpt2']['tokenizer'])
+        )
+        df_eval['roberta_features'] = df_eval['text'].apply(
+            lambda x: get_cls_embedding(x, models_dict['roberta']['model'], models_dict['roberta']['tokenizer'])
+        )
+        df_eval['bert_features'] = df_eval['text'].apply(
+            lambda x: get_cls_embedding(x, models_dict['bert']['model'], models_dict['bert']['tokenizer'])
+        )
+
+        # 提取标签
         labels_eval = df_eval['label'].values
+
+        # 准备特征
         features_eval_perp = df_eval['perplexity'].values.reshape(-1, 1)
         features_eval_roberta = np.vstack(df_eval['roberta_features'].values)
         features_eval_bert = np.vstack(df_eval['bert_features'].values)
         features_eval_hybrid = np.hstack([features_eval_perp, features_eval_roberta])
 
-        # 评估模型
+        # ✅ 使用前面训练好的分类器进行评估
         results_perp = evaluate_classifier(classifier_perp, features_eval_perp, labels_eval)
-        results_perp.update({'model_name': 'Perplexity', 'dataset': dataset_name, 'fold': 0})  # 鲁棒性数据集不属于任何折，设为0
+        results_perp.update({'model_name': 'Perplexity', 'dataset': dataset_name, 'fold': 0})
         all_fold_results.append(results_perp)
 
         results_roberta = evaluate_classifier(classifier_roberta, features_eval_roberta, labels_eval)
@@ -228,9 +242,9 @@ def main():
     plt.figure(figsize=(16, 10))
     sns.barplot(data=final_results, x='model_name', y='f1_score_mean', hue='dataset')
     plt.title('F1 Score Comparison Across Datasets', fontsize=16)
-    plt.xlabel('模型', fontsize=12)
-    plt.ylabel('F1 值', fontsize=12)
-    plt.legend(title='数据集')
+    plt.xlabel('Model', fontsize=12)
+    plt.ylabel('F1 Value', fontsize=12)
+    plt.legend(title='database')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig('f1_comparison.png')
@@ -241,9 +255,9 @@ def main():
     plt.figure(figsize=(16, 10))
     sns.barplot(data=final_results, x='model_name', y='accuracy_mean', hue='dataset')
     plt.title('Accuracy Comparison Across Datasets', fontsize=16)
-    plt.xlabel('模型', fontsize=12)
-    plt.ylabel('准确率', fontsize=12)
-    plt.legend(title='数据集')
+    plt.xlabel('Model', fontsize=12)
+    plt.ylabel('Accuracy', fontsize=12)
+    plt.legend(title='database')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig('accuracy_comparison.png')
